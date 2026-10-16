@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>席替えアプリ (サイズ可変＆A4横1枚完全保証版)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --success-color: #10b981;
+            --success-hover: #059669;
+            --danger-color: #ef4444;
+            --bg-color: #f3f4f6;
+            --seat-bg: #ffffff;
+            --seat-disabled: #e5e7eb;
+            --border-color: #9ca3af;
+            
+            /* 性別カラー */
+            --male-bg: #bae6fd;
+            --male-border: #0284c7;
+            --male-text: #0c4a6e;
+            --female-bg: #fbcfe8;
+            --female-border: #db2777;
+            --female-text: #4c0519;
+            
+            /* 固定席のカラー */
+            --fixed-border: #ea580c;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box !important;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            color: #1f2937;
+        }
+
+        .container {
+            max-width: 1150px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 0;
+            color: #111827;
+            font-size: 24px;
+        }
+
+        /* 設定エリア */
+        .setup-section {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            background-color: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+        }
+
+        .file-area {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        /* マトリックスサイズ変更エリア */
+        .matrix-settings {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #d1d5db;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .matrix-input {
+            width: 60px;
+            padding: 4px 8px;
+            font-size: 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: bold;
+            background-color: #e5e7eb;
+            color: #374151;
+        }
+
+        .status-badge.loaded {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        .control-panel {
+            flex: 1.5;
+            min-width: 350px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 15px;
+            font-size: 15px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            flex: 1;
+            min-width: 110px;
+        }
+
+        button:disabled {
+            background-color: #d1d5db;
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .btn-primary { background-color: var(--primary-color); color: white; }
+        .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); }
+        .btn-success { background-color: var(--success-color); color: white; }
+        .btn-success:hover:not(:disabled) { background-color: var(--success-hover); }
+        .btn-secondary { background-color: #6b7280; color: white; }
+        .btn-secondary:hover { background-color: #4b5563; }
+
+        .info-text {
+            font-size: 12px;
+            color: #4b5563;
+            margin: 0;
+            line-height: 1.4;
+        }
+
+        /* ────────────────────────────────────────────────────────
+           PDF保存エリア：A4サイズ（横比率）の絶対固定
+        ──────────────────────────────────────────────────────── */
+        .print-container-outer {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        #printArea {
+            width: 1040px;
+            height: 720px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .blackboard {
+            background-color: #1e3a1e;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 15px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+            font-size: 18px;
+            letter-spacing: 0.8em;
+            border: 2px solid #334155;
+            flex-shrink: 0;
+        }
+
+        .seating-grid {
+            display: grid;
+            gap: 10px;
+            flex-grow: 1;
+            min-height: 0;
+        }
+
+        .seat {
+            background-color: var(--seat-bg);
+            border: 3px solid var(--border-color); 
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 6px;
+            position: relative;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .seat.has-student { cursor: grab; }
+        .seat.has-student:active { cursor: grabbing; }
+        .seat.dragging { opacity: 0.4; transform: scale(0.95); border-style: dashed !important; }
+        .seat.drag-over { box-shadow: 0 0 12px rgba(79, 70, 229, 0.6); border-color: var(--primary-color) !important; background-color: #f0f2ff !important; }
+
+        .seat-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            font-weight: bold;
+            color: #4b5563;
+            border-bottom: 1px dashed rgba(0,0,0,0.1);
+            padding-bottom: 2px;
+            pointer-events: none;
+            flex-shrink: 0;
+        }
+
+        .student-hrno {
+            color: #111827;
+        }
+
+        .student-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex-grow: 1;
+            width: 100%;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .student-furigana {
+            font-size: 10px;
+            font-weight: bold;
+            color: #374151;
+            text-align: center;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .student-name {
+            font-size: 17px;
+            font-weight: 900;
+            white-space: nowrap; 
+            text-align: center;
+            line-height: 1.1;
+            letter-spacing: 0.02em;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis; 
+        }
+
+        /* 男子の座席スタイル */
+        .seat.male {
+            background-color: var(--male-bg) !important;
+            border-color: var(--male-border) !important;
+            color: var(--male-text) !important;
+        }
+        .seat.male .student-furigana { color: #0369a1; }
+        .seat.male .seat-header { color: #0369a1; border-bottom-color: rgba(2,132,199,0.2); }
+
+        /* 女子の座席スタイル */
+        .seat.female {
+            background-color: var(--female-bg) !important;
+            border-color: var(--female-border) !important;
+            color: var(--female-text) !important;
+        }
+        .seat.female .student-furigana { color: #be185d; }
+        .seat.female .seat-header { color: #be185d; border-bottom-color: rgba(219,39,119,0.2); }
+
+        /* 固定席のスタイル */
+        .seat.is-fixed {
+            border-color: var(--fixed-border) !important;
+            cursor: not-allowed !important;
+        }
+        .seat.is-fixed::after {
+            content: '📌 固定';
+            position: absolute;
+            top: 0px;
+            right: 0px;
+            background: var(--fixed-border);
+            color: white;
+            font-size: 9px;
+            padding: 1px 4px;
+            border-bottom-left-radius: 4px;
+            font-weight: bold;
+            z-index: 10;
+        }
+
+        /* 座席がない状態のスタイル */
+        .seat.disabled {
+            background-color: var(--seat-disabled) !important;
+            border-color: #9ca3af !important;
+            color: #6b7280 !important;
+            justify-content: center;
+            cursor: not-allowed !important;
+        }
+
+        .seat.disabled .student-name {
+            color: var(--danger-color);
+            font-size: 22px;
+            margin: 0;
+        }
+
+        .seat.disabled .seat-header,
+        .seat.disabled .student-furigana,
+        .seat.disabled::after {
+            display: none;
+        }
+
+        /* モーダルポップアップ */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 450px;
+            width: 90%;
+            max-height: 70vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        .modal-title {
+            margin-top: 0;
+            font-size: 16px;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 8px;
+        }
+        .student-option-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 12px;
+        }
+        .student-opt {
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            background: #f9fafb;
+        }
+        .student-opt:hover {
+            background: #e0e7ff;
+            border-color: var(--primary-color);
+        }
+        .student-opt.opt-male { border-left: 5px solid var(--male-border); }
+        .student-opt.opt-female { border-left: 5px solid var(--female-border); }
+        .btn-close-modal {
+            margin-top: 15px;
+            background: #6b7280;
+            color: white;
+            padding: 8px;
+            width: 100%;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>席替えアプリ (マトリックス可変版)</h1>
+
+    <div class="setup-section">
+        <div class="file-area">
+            <label for="csvFile">1. 名簿CSVファイルを読み込む</label>
+            <input type="file" id="csvFile" accept=".csv">
+            <div id="statusBadge" class="status-badge">CSV未選択</div>
+            
+            <div class="matrix-settings">
+                <span>縦(行数):</span>
+                <input type="number" id="rowsInput" class="matrix-input" value="7" min="1" max="15">
+                <span>× 横(列数):</span>
+                <input type="number" id="colsInput" class="matrix-input" value="6" min="1" max="15">
+            </div>
+        </div>
+        <div class="control-panel">
+            <p class="info-text">
+                💡 <strong>席の調整</strong>: 配置後に生徒のマスを<strong>ドラッグ＆ドロップ</strong>で自由に入れ替えられます！<br>
+                👉 <strong>左クリック</strong>: 「×」切り替え / <strong>右クリック</strong>: 特定の生徒をその席に「固定」
+            </p>
+            <div class="button-group">
+                <button class="btn-secondary" id="resetSeatsBtn">配置と×を全クリア</button>
+                <button class="btn-primary" id="shuffleBtn" disabled>席替えを実行</button>
+                <button class="btn-success" id="pdfBtn" disabled>確定してPDF保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="print-container-outer">
+        <div id="printArea">
+            <div class="seating-grid" id="seatingGrid"></div>
+            <div class="blackboard">黒板 / 教卓</div>
+        </div>
+    </div>
+</div>
+
+<div id="studentModal" class="modal-overlay">
+    <div class="modal-content">
+        <h3 class="modal-title" id="modalTitle">座席に固定する生徒を選択</h3>
+        <div class="student-option-list" id="modalStudentList"></div>
+        <button class="btn-close-modal" id="closeModalBtn">キャンセル・固定解除</button>
+    </div>
+</div>
+
+<script>
+    // ユーザーが変更可能な行・列数
+    let ROWS = 7;
+    let COLS = 6;
+    let TOTAL_SEATS = ROWS * COLS;
+
+    const seatingGrid = document.getElementById('seatingGrid');
+    const csvFileInput = document.getElementById('csvFile');
+    const statusBadge = document.getElementById('statusBadge');
+    const shuffleBtn = document.getElementById('shuffleBtn');
+    const resetSeatsBtn = document.getElementById('resetSeatsBtn');
+    const pdfBtn = document.getElementById('pdfBtn');
+    
+    const rowsInput = document.getElementById('rowsInput');
+    const colsInput = document.getElementById('colsInput');
+
+    const studentModal = document.getElementById('studentModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalStudentList = document.getElementById('modalStudentList');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+
+    let studentsList = []; 
+    let seatsData = [];    
+    let currentTargetSeatIndex = null; 
+    let draggedSeatIndex = null; 
+
+    // 行数・列数の入力が変更されたときの処理
+    rowsInput.addEventListener('change', updateMatrixSize);
+    colsInput.addEventListener('change', updateMatrixSize);
+
+    function updateMatrixSize() {
+        ROWS = parseInt(rowsInput.value) || 7;
+        COLS = parseInt(colsInput.value) || 6;
+        TOTAL_SEATS = ROWS * COLS;
+        initGrid();
+        if (studentsList.length > 0) {
+            shuffleBtn.disabled = false;
+        }
+        pdfBtn.disabled = true;
+    }
+
+    // 初期化：座席の生成（グリッド配置通りにデータを生成し、番号を右下から左上へ1,2,3...と採番）
+    function initGrid() {
+        seatingGrid.innerHTML = '';
+        seatsData = [];
+
+        seatingGrid.style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
+        seatingGrid.style.gridTemplateRows = `repeat(${ROWS}, 1fr)`;
+
+        for (let i = 0; i < TOTAL_SEATS; i++) {
+            // グリッド位置(r:行, c:列)から右下基準の番号を計算
+            const r = Math.floor(i / COLS);
+            const c = i % COLS;
+            const seatNumber = (ROWS - 1 - r) * COLS + (COLS - c);
+
+            seatsData.push({ id: seatNumber, isDisabled: false, isFixed: false, student: null });
+
+            const seatEl = document.createElement('div');
+            seatEl.classList.add('seat');
+            seatEl.dataset.id = i;
+
+            const headerEl = document.createElement('div');
+            headerEl.classList.add('seat-header');
+            const numEl = document.createElement('span');
+            numEl.textContent = seatNumber;
+            const hrnoEl = document.createElement('span');
+            hrnoEl.classList.add('student-hrno');
+            headerEl.appendChild(numEl);
+            headerEl.appendChild(hrnoEl);
+
+            const infoEl = document.createElement('div');
+            infoEl.classList.add('student-info');
+            const furiganaEl = document.createElement('div');
+            furiganaEl.classList.add('student-furigana');
+            const nameEl = document.createElement('div');
+            nameEl.classList.add('student-name');
+            infoEl.appendChild(furiganaEl);
+            infoEl.appendChild(nameEl);
+
+            seatEl.appendChild(headerEl);
+            seatEl.appendChild(infoEl);
+            seatingGrid.appendChild(seatEl);
+
+            // クリックイベント
+            seatEl.addEventListener('click', (e) => {
+                if (seatsData[i].isFixed || seatsData[i].student) return; 
+                toggleSeat(i, seatEl, hrnoEl, furiganaEl, nameEl);
+            });
+
+            // 右クリックイベント
+            seatEl.addEventListener('contextmenu', (e) => {
+                e.preventDefault(); 
+                if (seatsData[i].isDisabled || studentsList.length === 0) return;
+                openFixedSeatModal(i);
+            });
+
+            // ドラッグ＆ドロップイベント
+            seatEl.addEventListener('dragstart', (e) => {
+                if (seatsData[i].isDisabled || seatsData[i].isFixed || !seatsData[i].student) {
+                    e.preventDefault();
+                    return;
+                }
+                draggedSeatIndex = i;
+                seatEl.classList.add('dragging');
+            });
+
+            seatEl.addEventListener('dragend', () => {
+                seatEl.classList.remove('dragging');
+                removeDragOverStyles();
+            });
+
+            seatEl.addEventListener('dragover', (e) => {
+                e.preventDefault(); 
+                if (seatsData[i].isDisabled || seatsData[i].isFixed || i === draggedSeatIndex) return;
+                seatEl.classList.add('drag-over');
+            });
+
+            seatEl.addEventListener('dragleave', () => {
+                seatEl.classList.remove('drag-over');
+            });
+
+            seatEl.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (draggedSeatIndex === null || draggedSeatIndex === i) return;
+                if (seatsData[i].isDisabled || seatsData[i].isFixed) return;
+
+                const tempStudent = seatsData[i].student;
+                seatsData[i].student = seatsData[draggedSeatIndex].student;
+                seatsData[draggedSeatIndex].student = tempStudent;
+
+                draggedSeatIndex = null;
+                refreshGridUI();
+            });
+        }
+        refreshGridUI();
+    }
+
+    function removeDragOverStyles() {
+        document.querySelectorAll('.seat').forEach(el => el.classList.remove('drag-over'));
+    }
+
+    function toggleSeat(index, seatEl, hrnoEl, furiganaEl, nameEl) {
+        seatsData[index].isDisabled = !seatsData[index].isDisabled;
+        seatEl.classList.remove('male', 'female', 'is-fixed', 'has-student');
+        seatEl.removeAttribute('draggable');
+        hrnoEl.textContent = '';
+        furiganaEl.textContent = '';
+
+        if (seatsData[index].isDisabled) {
+            seatEl.classList.add('disabled');
+            nameEl.textContent = '×';
+            seatsData[index].student = null;
+            seatsData[index].isFixed = false;
+        } else {
+            seatEl.classList.remove('disabled');
+            nameEl.textContent = '';
+        }
+    }
+
+    function refreshGridUI() {
+        const seatElements = document.querySelectorAll('.seat');
+        seatsData.forEach((seat, i) => {
+            const seatEl = seatElements[i];
+            const numEl = seatEl.querySelector('.seat-header span:first-child');
+            const hrnoEl = seatEl.querySelector('.student-hrno');
+            const furiganaEl = seatEl.querySelector('.student-furigana');
+            const nameEl = seatEl.querySelector('.student-name');
+
+            // 座席番号を確実に描画
+            numEl.textContent = seat.id;
+
+            seatEl.classList.remove('male', 'female', 'is-fixed', 'disabled', 'has-student');
+            seatEl.removeAttribute('draggable');
+
+            if (seat.isDisabled) {
+                seatEl.classList.add('disabled');
+                nameEl.textContent = '×';
+                hrnoEl.textContent = '';
+                furiganaEl.textContent = '';
+                return;
+            }
+
+            if (seat.student) {
+                hrnoEl.textContent = seat.student.hrno;
+                furiganaEl.textContent = seat.student.furigana;
+                nameEl.textContent = seat.student.name;
+
+                if (seat.student.gender === '男') seatEl.classList.add('male');
+                if (seat.student.gender === '女') seatEl.classList.add('female');
+                
+                if (seat.isFixed) {
+                    seatEl.classList.add('is-fixed');
+                } else {
+                    seatEl.classList.add('has-student');
+                    seatEl.setAttribute('draggable', 'true');
+                }
+            } else {
+                hrnoEl.textContent = '';
+                furiganaEl.textContent = '';
+                nameEl.textContent = '';
+            }
+        });
+    }
+
+    function openFixedSeatModal(index) {
+        currentTargetSeatIndex = index;
+        const seatNumber = seatsData[index].id;
+        modalTitle.textContent = `座席番号 ${seatNumber} に固定する生徒を選択`;
+        modalStudentList.innerHTML = '';
+
+        const alreadyFixedNames = seatsData
+            .filter((s, idx) => s.isFixed && idx !== index && s.student)
+            .map(s => s.student.name);
+
+        studentsList.forEach(student => {
+            if (alreadyFixedNames.includes(student.name)) return;
+
+            const opt = document.createElement('div');
+            opt.classList.add('student-opt');
+            opt.classList.add(student.gender === '男' ? 'opt-male' : 'opt-female');
+            opt.innerHTML = `<span>${student.name} <small>(${student.furigana})</small></span> <span>${student.gender}</span>`;
+            
+            opt.addEventListener('click', () => {
+                seatsData[currentTargetSeatIndex].student = student;
+                seatsData[currentTargetSeatIndex].isFixed = true;
+                studentModal.style.display = 'none';
+                refreshGridUI();
+            });
+            modalStudentList.appendChild(opt);
+        });
+
+        studentModal.style.display = 'flex';
+    }
+
+    closeModalBtn.addEventListener('click', () => {
+        if (currentTargetSeatIndex !== null) {
+            seatsData[currentTargetSeatIndex].student = null;
+            seatsData[currentTargetSeatIndex].isFixed = false;
+        }
+        studentModal.style.display = 'none';
+        refreshGridUI();
+    });
+
+    csvFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) { parseCSV(event.target.result); };
+        reader.readAsText(file, 'Shift_JIS'); 
+    });
+
+    function parseCSV(text) {
+        studentsList = [];
+        const lines = text.split(/\r\n|\n/);
+
+        lines.forEach((line, index) => {
+            if (line.trim() === '') return;
+            const columns = line.split(',');
+            if (columns.length < 4) return;
+
+            let hrno = columns[0].trim();
+            let furigana = columns[1].trim();
+            let name = columns[2].trim();
+            let gender = columns[3].trim();
+
+            if (index === 0 && (hrno.toLowerCase().includes('hrno') || name.includes('氏名') || gender.includes('性別') || furigana.includes('ふりがな'))) {
+                return;
+            }
+            studentsList.push({ hrno, furigana, name, gender });
+        });
+
+        if (studentsList.length > 0) {
+            statusBadge.textContent = `読み込み成功: ${studentsList.length}人`;
+            statusBadge.classList.add('loaded');
+            shuffleBtn.disabled = false;
+            initGrid(); 
+        } else {
+            alert('CSVの形式を確認してください。');
+            statusBadge.textContent = 'エラー';
+            statusBadge.classList.remove('loaded');
+            shuffleBtn.disabled = true;
+            pdfBtn.disabled = true;
+        }
+    }
+
+    resetSeatsBtn.addEventListener('click', () => {
+        initGrid();
+        if (studentsList.length > 0) shuffleBtn.disabled = false;
+        pdfBtn.disabled = true;
+    });
+
+    // 席替え実行（番号順＝1番(右下)から順に割り当て）
+    shuffleBtn.addEventListener('click', () => {
+        if (studentsList.length === 0) return;
+
+        // seatsData を seat.id (1番, 2番...) の昇順にソートしてフリーの席を取得
+        const sortedSeats = [...seatsData].sort((a, b) => a.id - b.id);
+        const freeSeats = sortedSeats.filter(seat => !seat.isDisabled && !seat.isFixed);
+
+        const fixedStudentNames = seatsData
+            .filter(seat => seat.isFixed && seat.student)
+            .map(seat => seat.student.name);
+
+        const remainingStudents = studentsList.filter(student => !fixedStudentNames.includes(student.name));
+        const totalActiveSeatsCount = seatsData.filter(seat => !seat.isDisabled).length;
+        
+        if (studentsList.length > totalActiveSeatsCount) {
+            alert(`生徒数（${studentsList.length}人）が、現在の空席数（${totalActiveSeatsCount}席）を超えています。行数・列数を増やすか、×の数を減らしてください。`);
+            return;
+        }
+
+        const shuffled = [...remainingStudents];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+
+        seatsData.forEach(seat => {
+            if (!seat.isDisabled && !seat.isFixed) {
+                seat.student = null;
+            }
+        });
+
+        shuffled.forEach((student, index) => {
+            if (freeSeats[index]) {
+                freeSeats[index].student = student;
+            }
+        });
+
+        refreshGridUI();
+        pdfBtn.disabled = false;
+    });
+
+    // PDF出力
+    pdfBtn.addEventListener('click', () => {
+        const element = document.getElementById('printArea');
+        const opt = {
+            margin:       0, 
+            filename:     '席替え結果.pdf',
+            image:        { type: 'jpeg', quality: 1.0 },
+            html2canvas:  { scale: 2.0, useCORS: true, logging: false }, 
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' } 
+        };
+        html2pdf().set(opt).from(element).save();
+    });
+
+    initGrid();
+</script>
+
+</body>
+</html>
